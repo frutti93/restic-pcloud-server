@@ -1,0 +1,38 @@
+services:
+  restic-pcloud-server:
+    build: .
+    container_name: restic-pcloud-server
+    restart: unless-stopped
+    command:
+      - -rclone-config=/config/rclone.conf
+      - -remote-root=${PCLOUD_REMOTE_ROOT}
+      - -listen=0.0.0.0:8080
+      - -max-retries=3
+      - -debug=${DEBUG:-false}
+    environment:
+      - RESTIC_PCLOUD_AUTH_USER=${AUTH_USER}
+      - RESTIC_PCLOUD_AUTH_PASS=${AUTH_PASS}
+    volumes:
+      - ${RCLONE_CONF_PATH}:/config/rclone.conf:ro
+    # No ports published to the host: only reachable via the Traefik network below.
+    # To skip a reverse proxy and reach this directly over plain HTTP instead (see the
+    # README's "Setup" section for the tradeoffs), remove the networks:/labels: blocks
+    # below and add:
+    #   ports:
+    #     - "8080:8080"
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pcloud-repair.rule=Host(`${REPAIR_HOSTNAME}`)"
+      - "traefik.http.routers.pcloud-repair.entrypoints=websecure"
+      - "traefik.http.routers.pcloud-repair.tls=true"
+      - "traefik.http.routers.pcloud-repair.tls.certresolver=${TRAEFIK_CERTRESOLVER}"
+      - "traefik.http.services.pcloud-repair.loadbalancer.server.port=8080"
+
+networks:
+  # Must already exist and be the same network your Traefik container is attached to.
+  # Check the name with: docker network ls
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK}
